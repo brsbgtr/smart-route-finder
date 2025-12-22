@@ -1,0 +1,24 @@
+{
+  "nodes": ["A", "B", "C", "D", "E"],
+  "coordinates": {
+    "A": [41.0086, 28.9802], 
+    "B": [41.0054, 28.9768], 
+    "C": [41.0115, 28.9833], 
+    "D": [41.0106, 28.9680], 
+    "E": [41.0173, 28.9702]
+  },
+  "nodeNames": {
+    "A": "Ayasofya",
+    "B": "Sultanahmet",
+    "C": "Topkapı Sarayı",
+    "D": "Kapalıçarşı",
+    "E": "Eminönü"
+  },
+  "edges": {
+    "A": [{"node": "B", "weight": 400}, {"node": "C", "weight": 350}, {"node": "E", "weight": 1200}],
+    "B": [{"node": "A", "weight": 400}, {"node": "D", "weight": 900}],
+    "C": [{"node": "A", "weight": 350}, {"node": "E", "weight": 800}],
+    "D": [{"node": "B", "weight": 900}, {"node": "E", "weight": 700}],
+    "E": [{"node": "A", "weight": 1200}, {"node": "C", "weight": 800}, {"node": "D", "weight": 700}]
+  }
+}
