@@ -1,90 +1,156 @@
-var map = L.map('map').setView([41.0082, 28.9784], 14); // İstanbul'a odaklan
+const map = L.map("map").setView([41.0082, 28.9784], 13);
 
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap'
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap"
 }).addTo(map);
 
-var graphData = null;
-var selectedNodes = []; // Seçilen noktaları tutar
-var markers = {};      // Haritadaki işaretçileri tutar
-var routeLine = null;  // Çizilen yol çizgisi
+const graph = new Dijkstra();
+let selectedNodes = [];
+let markers = [];
+let routeLine = null;
 
-// 1. Veriyi JSON dosyasından çek
-fetch('graph-data.json')
-    .then(response => response.json())
-    .then(data => {
-        graphData = data;
-        drawNodes(data);
-    })
-    .catch(error => console.error('Veri okunurken hata:', error));
+const statusEl = document.getElementById("status");
 
-// 2. Noktaları Haritaya Ekle (Mavi Pinler)
-function drawNodes(data) {
-    data.nodes.forEach(nodeKey => {
-        let coords = data.coordinates[nodeKey];
-        let name = data.nodeNames[nodeKey];
 
-        // Haritaya marker ekle
-        let marker = L.marker(coords).addTo(map);
-        marker.bindPopup(`<b>${name}</b><br>Kodu: ${nodeKey}`);
-        
-        // Marker'a tıklama özelliği ekle
-        marker.on('click', () => handleNodeClick(nodeKey));
-        
-        markers[nodeKey] = marker; // Marker'ı sakla
+// İstanbul geneli
+const BBOX = "40.7,28.5,41.3,29.5";
+
+async function loadGraphData() {
+    statusEl.innerText = "Yol verileri yükleniyor...";
+
+    const query = `
+        [out:json];
+        (way["highway"](${BBOX}););
+        (._;>;);
+        out body;
+    `;
+
+    try {
+        const res = await fetch(
+            "https://overpass-api.de/api/interpreter?data=" +
+            encodeURIComponent(query)
+        );
+        const data = await res.json();
+        buildGraph(data);
+
+        statusEl.innerText = "Hazır! İki nokta seçin.";
+        statusEl.style.color = "green";
+    } catch (err) {
+        statusEl.innerText = "Veri alınamadı!";
+        statusEl.style.color = "red";
+        console.error(err);
+    }
+}
+
+function buildGraph(data) {
+    const nodes = {};
+
+    data.elements.forEach(el => {
+        if (el.type === "node") {
+            nodes[el.id] = el;
+            graph.addNode(String(el.id), el.lat, el.lon);
+        }
     });
-    
-    // Yolları gri çizgilerle göster (Görsellik için)
-    drawGraphConnections(data);
+
+    data.elements.forEach(el => {
+        if (el.type === "way") {
+            for (let i = 0; i < el.nodes.length - 1; i++) {
+                const a = el.nodes[i];
+                const b = el.nodes[i + 1];
+                if (nodes[a] && nodes[b]) {
+                    const d = distance(
+                        nodes[a].lat, nodes[a].lon,
+                        nodes[b].lat, nodes[b].lon
+                    );
+                    graph.addEdge(String(a), String(b), d);
+                }
+            }
+        }
+    });
 }
 
-// 3. Bağlantıları Çiz (Gri Çizgiler)
-function drawGraphConnections(data) {
-    for (let fromNode in data.edges) {
-        let edges = data.edges[fromNode];
-        let fromCoords = data.coordinates[fromNode];
-        
-        edges.forEach(edge => {
-            let toCoords = data.coordinates[edge.node];
-            L.polyline([fromCoords, toCoords], {color: 'grey', weight: 1, opacity: 0.5}).addTo(map);
-        });
+map.on("click", e => {
+    if (selectedNodes.length === 2) reset();
+
+    const nearest = findNearest(e.latlng.lat, e.latlng.lng);
+    selectedNodes.push(nearest);
+
+    const m = L.marker([
+        graph.nodes[nearest].lat,
+        graph.nodes[nearest].lng
+    ])
+        .addTo(map)
+        .bindPopup(selectedNodes.length === 1 ? "Başlangıç" : "Bitiş")
+        .openPopup();
+
+    markers.push(m);
+
+    if (selectedNodes.length === 2) runDijkstra();
+});
+
+function runDijkstra() {
+    statusEl.innerText = "Hesaplanıyor...";
+
+    const result = graph.findShortestPath(
+        selectedNodes[0],
+        selectedNodes[1]
+    );
+
+    if (!result) {
+        statusEl.innerText = "Yol bulunamadı.";
+        return;
     }
+
+    const coords = result.path.map(id => [
+        graph.nodes[id].lat,
+        graph.nodes[id].lng
+    ]);
+
+    routeLine = L.polyline(coords, {
+        color: "red",
+        weight: 5
+    }).addTo(map);
+
+    map.fitBounds(routeLine.getBounds());
+
+    statusEl.innerHTML =
+        `Rota bulundu<br>Mesafe: ${Math.round(result.distance)} metre`;
 }
 
-// 4. Tıklama Mantığı
-function handleNodeClick(nodeKey) {
-    if (selectedNodes.length >= 2) {
-        // Zaten 2 nokta seçiliyse sıfırla
-        selectedNodes = [];
-        if (routeLine) map.removeLayer(routeLine); // Eski yolu sil
-        alert("Seçim sıfırlandı. Yeni başlangıç noktası seçin.");
-    }
-
-    selectedNodes.push(nodeKey);
-    console.log("Seçilenler:", selectedNodes);
-
-    if (selectedNodes.length === 1) {
-        markers[nodeKey].openPopup(); // İlk seçileni göster
-    } else if (selectedNodes.length === 2) {
-        // İkinci nokta seçildi -> ROTA HESAPLA!
-        calculateAndDrawRoute(selectedNodes[0], selectedNodes[1]);
-    }
+function reset() {
+    selectedNodes = [];
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    if (routeLine) map.removeLayer(routeLine);
 }
 
-// 5. Rotayı Hesapla ve Çiz
-function calculateAndDrawRoute(start, end) {
-    let result = findShortestPath(graphData, start, end);
-    
-    if (result) {
-        let pathCoordinates = result.path.map(nodeKey => graphData.coordinates[nodeKey]);
-        
-        // Kırmızı çizgi ile yolu çiz
-        routeLine = L.polyline(pathCoordinates, {color: 'red', weight: 5}).addTo(map);
-        map.fitBounds(routeLine.getBounds()); // Yola odaklan
-        
-        alert(`Rota Bulundu!\nYol: ${result.path.join(' -> ')}\nMesafe: ${result.distance} metre`);
-    } else {
-        alert("Bu iki nokta arasında yol bulunamadı!");
+function findNearest(lat, lng) {
+    let min = Infinity;
+    let closest = null;
+
+    for (let id in graph.nodes) {
+        const n = graph.nodes[id];
+        const d = distance(lat, lng, n.lat, n.lng);
+        if (d < min) {
+            min = d;
+            closest = id;
+        }
     }
+    return closest;
 }
+
+function distance(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+loadGraphData();

@@ -1,7 +1,43 @@
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
 
-map { 
-    height: 670px; 
-    width: 95%; 
-    margin: 20px auto; 
-    border: none; 
+#map {
+    height: 100vh;
+}
+
+#controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: white;
+    padding: 15px;
+    width: 240px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+}
+
+#status {
+    font-weight: bold;
+}
+
+.hint {
+    font-size: 0.9em;
+    color: #666;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    background: #007bff;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0056b3;
 }

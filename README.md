@@ -25,4 +25,4 @@ Since the project loads data from a local JSON file (`graph-data.json`), it requ
 2. Open a terminal inside the project folder.
 3. Run the following command (if you have Python installed):
    ```bash
-   python -m http.server
+   python -m http.server 5500
